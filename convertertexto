@@ -1,0 +1,121 @@
+function onEdit(e) {
+  if (!e || !e.range) return;
+
+  const lock = LockService.getDocumentLock();
+  lock.tryLock(3000);
+
+  try {
+    const range = e.range;
+    const sheet = range.getSheet();
+    const sheetName = sheet.getName();
+
+    // 🔒 Nunca mexer na aba GERAL
+    if (sheetName === "GERAL") return;
+
+    // 🔒 Nunca mexer em fórmulas
+    if (range.getFormula()) return;
+
+    const startRow = range.getRow();
+    const numRows = range.getNumRows();
+
+    // Só da linha 3 pra baixo
+    if (startRow < 3) return;
+
+    const startCol = range.getColumn();
+    const numCols = range.getNumColumns();
+
+    const values = range.getValues();
+    let changed = false;
+
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < numCols; c++) {
+
+        const col = startCol + c;
+        let v = values[r][c];
+
+        // ======================
+        // COLUNA A — NOME
+        // ======================
+        if (col === 1 && typeof v === "string") {
+          let nome = v
+            .toLowerCase()
+            .replace(/\u00A0/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          if (nome) {
+            nome = nome.charAt(0).toUpperCase() + nome.slice(1);
+            nome = nome.replace(/ (\w)/g, (_, l) => " " + l.toUpperCase());
+          }
+
+          values[r][c] = nome;
+          changed = true;
+        }
+
+        // ======================
+        // COLUNA B — HORA
+        // ======================
+        if (col === 2 && typeof v === "string") {
+          let texto = v.toLowerCase().trim();
+
+          let hMatch = texto.match(/^(\d{1,2})h$/);
+          if (hMatch) {
+            let hh = Math.min(+hMatch[1], 23);
+            values[r][c] = String(hh).padStart(2, "0") + ":00";
+            changed = true;
+            continue;
+          }
+
+          let nums = texto.replace(/\D/g, "");
+          if (nums.length >= 3) {
+            let hh = Math.min(+nums.slice(0, 2), 23);
+            let mm = Math.min(+nums.slice(2, 4) || 0, 59);
+            values[r][c] =
+              String(hh).padStart(2, "0") + ":" +
+              String(mm).padStart(2, "0");
+            changed = true;
+          }
+        }
+
+        // ======================
+        // COLUNA C e D — VALORES
+        // ======================
+        if ([3, 4].includes(col) && typeof v === "string") {
+          let limpo = v
+            .replace(/\u00A0/g, "")
+            .replace(/[^\d,]/g, "")
+            .replace(",", ".");
+
+          if (limpo !== "") {
+            values[r][c] = Number(limpo);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    // ✍️ Força escrita
+    if (changed) {
+      range.setValues(values);
+      SpreadsheetApp.flush();
+    }
+
+    // ⏳ Aguarda estabilizar (ESSENCIAL)
+    Utilities.sleep(150);
+
+    // ======================
+    // FORMATAÇÃO TOTAL (A–D)
+    // ======================
+    sheet.getRange(startRow, 1, numRows, 4)
+      .setFontFamily("Arial")
+      .setFontSize(11)
+      .setFontWeight("normal")
+      .setBorder(
+        true, true, true, true,
+        true, true
+      );
+
+  } finally {
+    lock.releaseLock();
+  }
+}
