@@ -1,0 +1,61 @@
+function gerarXLSX_download() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getActiveSheet(); // ABA GERAL
+  const nomeAba = aba.getName();
+
+  // Lê data da célula A1
+  let data = aba.getRange("A1").getValue();
+  let dataFormatada = "SEM_DATA";
+
+  if (data instanceof Date) {
+    dataFormatada = Utilities.formatDate(
+      data,
+      Session.getScriptTimeZone(),
+      "dd-MM-yyyy"
+    );
+  } else if (typeof data === "string" && data.trim() !== "") {
+    dataFormatada = data.replace(/\//g, "-");
+  }
+
+  // 🔴 NOME FINAL DO ARQUIVO
+  const nomeArquivo = `TABELA_GERAL_${dataFormatada}`;
+
+  // Cria planilha temporária JÁ COM O NOME CERTO
+  const temp = SpreadsheetApp.create(nomeArquivo);
+
+  // Copia a aba inteira
+  const novaAba = aba.copyTo(temp).setName(nomeAba);
+
+  // Remove abas extras
+  temp.getSheets().forEach(s => {
+    if (s.getName() !== nomeAba) temp.deleteSheet(s);
+  });
+
+  // URL de exportação
+  const url =
+    `https://docs.google.com/spreadsheets/d/${temp.getId()}/export?format=xlsx`;
+
+  // HTML que abre nova aba (download)
+  const html = `
+    <html>
+      <body>
+        <a id="d" href="${url}" target="_blank">Download</a>
+        <script>
+          document.getElementById("d").click();
+          setTimeout(() => google.script.host.close(), 1000);
+        </script>
+      </body>
+    </html>
+  `;
+
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html)
+      .setWidth(120)
+      .setHeight(80),
+    "Download"
+  );
+
+  // Apaga a planilha temporária
+  Utilities.sleep(4000);
+  DriveApp.getFileById(temp.getId()).setTrashed(true);
+}
