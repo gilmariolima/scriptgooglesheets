@@ -202,3 +202,27 @@ function lancarTabelaGeral() {
 
   SpreadsheetApp.getUi().alert("Tabela lançada com sucesso!");
 }
+
+
+/*
+
+=IMPORTRANGE(
+ "1NGvUJ8Ssv8Ym79CSXoLaZclVGvcvxFwhAAMe8lmVSoA";
+ "BASE_GILMARIO!A1"
+)
+
+
+=SEERRO(
+  QUERY(
+    IMPORTRANGE(
+      "1NGvUJ8Ssv8Ym79CSXoLaZclVGvcvxFwhAAMe8lmVSoA";
+      "BASE_GILMARIO!A3:E"
+    );
+    "select Col2, Col3, Col4, Col5 
+     where Col1 = date '" & TEXTO($A$1;"yyyy-mm-dd") & "'";
+    0
+  );
+""
+)
+
+*/
