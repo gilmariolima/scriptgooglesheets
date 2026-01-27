@@ -1,0 +1,177 @@
+function gerar_pdf() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getActiveSheet();
+
+  const range = aba.getDataRange();
+  const dados = range.getValues();
+  const bgs = range.getBackgrounds();
+
+  const parseValor = v => {
+    if (typeof v === "number") return v;
+    if (typeof v === "string") {
+      return Number(
+        v.replace("R$", "")
+         .replace(/\./g, "")
+         .replace(",", ".")
+         .trim()
+      ) || 0;
+    }
+    return 0;
+  };
+
+  let data = aba.getRange("A1").getValue();
+  let dataFormatada = "SEM_DATA";
+  if (data instanceof Date) {
+    dataFormatada = Utilities.formatDate(
+      data,
+      Session.getScriptTimeZone(),
+      "dd/MM/yyyy"
+    );
+  }
+
+  let html = `
+  <html>
+  <head>
+    <style>
+      body { font-family: Arial; font-size: 11px; padding: 20px; }
+      h1 { text-align: center; margin-bottom: 25px; }
+
+      .agente-vermelho { color: #b30000; margin-top: 20px; }
+      .agente-azul { color: #0b5394; margin-top: 20px; }
+
+      table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+      th, td { border: 1px solid #999; padding: 5px; }
+      th { background: #eee; }
+
+      .r { text-align: right; }
+      .total { font-weight: bold; background: #f5f5f5; }
+    </style>
+  </head>
+  <body>
+    <h1>Relatório PIX - ${dataFormatada}</h1>
+  `;
+
+  let agenteAtual = "";
+  let classeAgente = "agente-vermelho";
+  let linhasAgente = [];
+  let totalAgente = 0;
+
+  const imprimirAgente = () => {
+    if (!agenteAtual || totalAgente <= 0) return;
+
+    html += `<h2 class="${classeAgente}">${agenteAtual}</h2>`;
+    html += `
+      <table>
+        <tr>
+          <th>Nome</th>
+          <th>Hora</th>
+          <th class="r">PIX</th>
+          <th class="r">Taxa</th>
+          <th class="r">PIX Total</th>
+        </tr>
+    `;
+
+    linhasAgente.forEach(l => {
+      html += `
+        <tr>
+          <td>${l.nome}</td>
+          <td>${l.hora}</td>
+          <td class="r">R$ ${l.pix.toFixed(2)}</td>
+          <td class="r">R$ ${l.taxa.toFixed(2)}</td>
+          <td class="r">R$ ${l.total.toFixed(2)}</td>
+        </tr>
+      `;
+    });
+
+    html += `
+      <tr class="total">
+        <td colspan="4" class="r">Total do Agente</td>
+        <td class="r">R$ ${totalAgente.toFixed(2)}</td>
+      </tr>
+      </table>
+    `;
+
+    linhasAgente = [];
+    totalAgente = 0;
+  };
+
+  for (let i = 0; i < dados.length; i++) {
+    const [colA, hora, pix, taxa, pixTotal, , , agencia] = dados[i];
+    const bg = bgs[i][0];
+
+    // ===== INÍCIO DO AGENTE =====
+    if (typeof colA === "string" && colA.startsWith("AGENTE:")) {
+      imprimirAgente();
+
+      const nome = colA.replace("AGENTE:", "").trim();
+
+      // Detecta se cabeçalho é azul
+      const isAzul =
+        bg &&
+        (
+          bg.toLowerCase().includes("0000ff") ||
+          bg.toLowerCase().includes("1c4587") ||
+          bg.toLowerCase().includes("0b5394") ||
+          bg.toLowerCase().includes("1155cc")
+        );
+
+      classeAgente = isAzul ? "agente-azul" : "agente-vermelho";
+
+      const agenciaNome =
+        isAzul && typeof agencia === "string" && agencia.trim()
+          ? " - " + agencia.trim()
+          : "";
+
+      agenteAtual = `AGENTE: ${nome}${agenciaNome}`;
+      continue;
+    }
+
+    if (!colA) continue;
+
+    const totalLinha = parseValor(pixTotal);
+
+    // ===== LINHA TOTAL =====
+    if (typeof colA === "string" && colA.trim().toUpperCase() === "TOTAL:") {
+      if (totalLinha > 0) totalAgente = totalLinha;
+      continue;
+    }
+
+    // ===== LINHAS NORMAIS =====
+    if (totalLinha > 0) {
+      linhasAgente.push({
+        nome: colA,
+        hora: hora || "",
+        pix: parseValor(pix),
+        taxa: parseValor(taxa),
+        total: totalLinha
+      });
+    }
+  }
+
+  imprimirAgente();
+  html += `</body></html>`;
+
+  const pdfBlob = HtmlService
+    .createHtmlOutput(html)
+    .getAs(MimeType.PDF)
+    .setName(`TABELA_GERAL_${dataFormatada}.pdf`);
+
+  const file = DriveApp.createFile(pdfBlob);
+
+  const downloadHtml = `
+    <html>
+      <body>
+        <a id="d" href="${file.getUrl()}" target="_blank">download</a>
+        <script>
+          document.getElementById("d").click();
+          setTimeout(() => google.script.host.close(), 1000);
+        </script>
+      </body>
+    </html>
+  `;
+
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(downloadHtml),
+    "Gerando PDF"
+  );
+}
